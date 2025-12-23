@@ -1,0 +1,206 @@
+const Supabase = require('../util/supabaseClient');
+const AppError = require('../util/appError');
+const catchAsync = require('../util/catchAsync');
+const supabase = require('../util/supabaseClient');
+const mm = require('music-metadata');
+const multer = require('multer');
+
+const upload = multer({ storage: multer.memoryStorage() }).fields([
+  { name: 'music', maxCount: 1 },
+  { name: 'image', maxCount: 1 }
+]);
+
+async function uploadBufferToBucket(bucket, path, buffer, contentType) {
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(path, buffer, {
+      contentType,
+      upsert: false
+    });
+
+  if (error) throw error;
+
+  // get public URL
+  const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+  return publicData && publicData.publicUrl ? publicData.publicUrl : null;
+}
+
+async function prepareSongRecord(req) {
+  if (!req.files) {
+    throw new AppError(
+      'No files parsed. Ensure upload middleware is applied on the route',
+      400
+    );
+  }
+
+  const musicFile = req.files.music && req.files.music[0];
+  const imageFile = req.files.image && req.files.image[0];
+
+  if (!musicFile) {
+    throw new AppError('Audio file is required (field name: music)', 400);
+  }
+
+  const audioBucket = process.env.SUPABASE_AUDIO_BUCKET || 'songs';
+  const imageBucket = process.env.SUPABASE_IMAGE_BUCKET || 'images';
+
+  const timestamp = Date.now();
+  const audioPath = `${timestamp}_${musicFile.originalname}`;
+  const imagePath = imageFile ? `${timestamp}_${imageFile.originalname}` : null;
+
+  let duration = null;
+  try {
+    const meta = await mm.parseBuffer(musicFile.buffer, musicFile.mimetype);
+    duration =
+      meta && meta.format && meta.format.duration
+        ? Math.round(meta.format.duration)
+        : null;
+  } catch (err) {
+    console.warn(
+      'Failed to parse audio metadata for duration:',
+      err.message || err
+    );
+  }
+
+  let audioUrl = null;
+  let imageUrl = null;
+  try {
+    audioUrl = await uploadBufferToBucket(
+      audioBucket,
+      audioPath,
+      musicFile.buffer,
+      musicFile.mimetype
+    );
+  } catch (err) {
+    throw new AppError(`Failed to upload audio: ${err.message || err}`, 500);
+  }
+
+  if (imageFile) {
+    try {
+      imageUrl = await uploadBufferToBucket(
+        imageBucket,
+        imagePath,
+        imageFile.buffer,
+        imageFile.mimetype
+      );
+    } catch (err) {
+      console.warn(
+        'Image upload failed, continuing without image URL:',
+        err.message || err
+      );
+      imageUrl = null;
+    }
+  }
+
+  const record = {
+    copyright_text: req.body.copyright_text || null,
+    duration: duration,
+    image: imageUrl,
+    label: req.body.label || null,
+    media_url: audioUrl,
+    music: musicFile.originalname,
+    song: req.body.song || null,
+    year: req.body.year || null
+  };
+
+  return record;
+}
+
+exports.getAllMusic = catchAsync(async (req, res, next) => {
+  const fields = [
+    'id',
+    'copyright_text',
+    'duration',
+    'image',
+    'label',
+    'media_url',
+    'music',
+    'song',
+    'year'
+  ].join(',');
+
+  const { data, error } = await supabase.from('songs').select(fields);
+
+  if (error) {
+    return next(new AppError(error.message || 'Database error', 500));
+  }
+
+  res.status(200).json({ status: 'success', length: data.length, songs: data });
+});
+
+exports.getMusic = catchAsync(async (req, res, next) => {
+  const id = req.params.id;
+
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(String(id || ''))) {
+    return next(new AppError('Invalid id format', 400));
+  }
+
+  const fields = [
+    'id',
+    'copyright_text',
+    'duration',
+    'image',
+    'label',
+    'media_url',
+    'music',
+    'song',
+    'year'
+  ].join(',');
+
+  const { data, error } = await supabase
+    .from('songs')
+    .select(fields)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    return next(new AppError(error.message || 'Database error', 500));
+  }
+
+  if (!data) {
+    return next(new AppError('Could not find the song', 404));
+  }
+
+  res.status(200).json({ status: 'success', song: data });
+});
+
+exports.uploadSong = catchAsync(async (req, res, next) => {
+  try {
+    await new Promise((resolve, reject) => {
+      upload(req, res, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  } catch (err) {
+    return next(
+      new AppError(`Failed to parse upload: ${err.message || err}`, 400)
+    );
+  }
+
+  let record;
+  try {
+    record = await prepareSongRecord(req);
+  } catch (err) {
+    return next(
+      err instanceof AppError
+        ? err
+        : new AppError(err.message || 'Upload failed', 500)
+    );
+  }
+
+  const { data, error } = await supabase
+    .from('songs')
+    .insert([record])
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    return next(
+      new AppError(error.message || 'Failed to insert song record', 500)
+    );
+  }
+
+  res.status(201).json({ status: 'success', song: data });
+});
