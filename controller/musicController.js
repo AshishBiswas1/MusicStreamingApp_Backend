@@ -271,3 +271,66 @@ exports.userWatch = catchAsync(async (req, res, next) => {
 
   res.status(201).json({ status: 'success', history: data });
 });
+
+exports.search = catchAsync(async (req, res, next) => {
+  // Accept query from `req.query.q` (GET) or `req.body.q` (POST)
+  const searchSchema = z.object({
+    q: z.string().min(1, 'Search query is required'),
+    page: z
+      .preprocess(
+        (val) => (val === undefined ? undefined : Number(val)),
+        z.number().int().positive()
+      )
+      .optional(),
+    limit: z
+      .preprocess(
+        (val) => (val === undefined ? undefined : Number(val)),
+        z.number().int().positive().max(100)
+      )
+      .optional()
+  });
+
+  const input = {
+    q: (req.query && req.query.q) || (req.body && req.body.q) || undefined,
+    page: (req.query && req.query.page) || (req.body && req.body.page),
+    limit: (req.query && req.query.limit) || (req.body && req.body.limit)
+  };
+
+  const parsed = searchSchema.safeParse(input);
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((i) => i.message).join(', ');
+    return next(new AppError(message, 400));
+  }
+
+  const { q, page = 1, limit = 20 } = parsed.data;
+
+  const fields = [
+    'id',
+    'copyright_text',
+    'duration',
+    'image',
+    'label',
+    'media_url',
+    'music',
+    'song',
+    'year'
+  ].join(',');
+
+  // Use ILIKE for case-insensitive LIKE search in Postgres
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  const { data, error } = await supabase
+    .from('songs')
+    .select(fields)
+    .ilike('song', `%${q}%`)
+    .range(from, to);
+
+  if (error) {
+    return next(new AppError(error.message || 'Database error', 500));
+  }
+
+  res
+    .status(200)
+    .json({ status: 'success', results: data.length, songs: data });
+});

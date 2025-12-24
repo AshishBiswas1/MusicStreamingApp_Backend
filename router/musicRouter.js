@@ -6,6 +6,8 @@ const router = express.Router();
 
 router.route('/').get(musicController.getAllMusic);
 
+router.route('/search').get(musicController.search);
+
 router.use(authController.protect);
 router.post(
   '/upload',
