@@ -4,6 +4,7 @@ const catchAsync = require('../util/catchAsync');
 const supabase = require('../util/supabaseClient');
 const mm = require('music-metadata');
 const multer = require('multer');
+const { z } = require('zod');
 
 const upload = multer({ storage: multer.memoryStorage() }).fields([
   { name: 'music', maxCount: 1 },
@@ -203,4 +204,70 @@ exports.uploadSong = catchAsync(async (req, res, next) => {
   }
 
   res.status(201).json({ status: 'success', song: data });
+});
+
+exports.likeSong = catchAsync(async (req, res, next) => {
+  const { song_id, playlist_name = 'Liked' } = req.body;
+
+  if (!song_id) {
+    return next(new AppError('Please select a song', 400));
+  }
+
+  const { data, error } = await supabase
+    .from('playlists')
+    .insert({ song_id, playlist_name, user_id: req.user.id })
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    return next(
+      new AppError(
+        error.message || 'There is a problem in adding the song to liked list'
+      )
+    );
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data
+  });
+});
+
+exports.userWatch = catchAsync(async (req, res, next) => {
+  // Validate input: we only accept `song_id` from client. watched_at is set server-side.
+  const userWatchSchema = z.object({
+    song_id: z.string().uuid('Invalid song_id')
+  });
+
+  const parsed = userWatchSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((e) => e.message).join(', ');
+    return next(new AppError(message, 400));
+  }
+
+  const { song_id } = parsed.data;
+
+  if (!req.user || !req.user.id) {
+    return next(new AppError('Authenticated user required', 401));
+  }
+
+  const record = {
+    user_id: req.user.id,
+    song_id,
+    watched_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('history')
+    .insert([record])
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    return next(
+      new AppError(error.message || 'Failed to insert history record', 500)
+    );
+  }
+
+  res.status(201).json({ status: 'success', history: data });
 });
