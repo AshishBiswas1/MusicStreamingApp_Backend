@@ -18,6 +18,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "music-metadata": "^11.10.3",
+    "podcast-api": "^2.0.4",
     "zod": "^4.2.1"
   }
 }
