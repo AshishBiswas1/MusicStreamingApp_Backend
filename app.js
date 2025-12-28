@@ -1,5 +1,7 @@
 const express = require('express');
 const morgan = require('morgan');
+const cors = require('cors');
+const helmet = require('helmet');
 const globalErrorHandler = require('./controller/errorontroller');
 const AppError = require('./util/appError');
 
@@ -9,6 +11,55 @@ const playlistRouter = require('./router/playlistRouter');
 const podcastRouter = require('./router/podcastRouter');
 const recentRouter = require('./router/recently_playedRouter');
 const app = express();
+
+// Set security HTTP headers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", 'https://listen-api.listennotes.com'],
+        imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+        mediaSrc: ["'self'", 'https:', 'blob:']
+      }
+    }
+  })
+);
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, curl)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
+
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      process.env.NODE_ENV === 'development'
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Parse JSON bodies
 app.use(express.json({ limit: '10kb' }));
