@@ -4,7 +4,7 @@ const https = require('https');
 const supabase = require('../util/supabaseClient');
 const AppError = require('../util/appError');
 
-const API_KEY = '74aeeb795a6a44b69bf2154d0074e692';
+const API_KEY = process.env.API_KEY;
 const client = Client({ apiKey: API_KEY });
 
 function delay(ms) {
