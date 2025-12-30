@@ -269,6 +269,34 @@ exports.getLikedSongs = catchAsync(async (req, res, next) => {
   });
 });
 
+exports.unlikeSong = catchAsync(async (req, res, next) => {
+  const { song_id } = req.body;
+
+  if (!song_id) {
+    return next(new AppError('Please provide a song ID', 400));
+  }
+
+  const { data, error } = await supabase
+    .from('likes')
+    .delete()
+    .eq('song_id', song_id)
+    .eq('user_id', req.user.id);
+
+  if (error) {
+    return next(
+      new AppError(
+        error.message ||
+          'There is a problem in removing the song from liked list'
+      )
+    );
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Song removed from liked list'
+  });
+});
+
 exports.userWatch = catchAsync(async (req, res, next) => {
   // Validate input: we only accept `song_id` from client. watched_at is set server-side.
   const userWatchSchema = z.object({

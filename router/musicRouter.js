@@ -40,6 +40,8 @@ router.route('/userWatch').post(musicController.userWatch);
 
 router.route('/like').post(musicController.likeSong);
 
+router.route('/unlike').delete(musicController.unlikeSong);
+
 router.route('/liked').get(musicController.getLikedSongs);
 
 router.route('/:id').get(musicController.getMusic);
