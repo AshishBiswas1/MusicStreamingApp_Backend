@@ -220,6 +220,55 @@ exports.likeSong = catchAsync(async (req, res, next) => {
   });
 });
 
+exports.getLikedSongs = catchAsync(async (req, res, next) => {
+  if (!req.user || !req.user.id) {
+    return next(new AppError('Authenticated user required', 401));
+  }
+
+  // Get liked song IDs for the user
+  const { data: likes, error: likesError } = await supabase
+    .from('likes')
+    .select('song_id')
+    .eq('user_id', req.user.id);
+
+  if (likesError) {
+    return next(
+      new AppError(likesError.message || 'Failed to fetch liked songs', 500)
+    );
+  }
+
+  if (!likes || likes.length === 0) {
+    return res.status(200).json({
+      status: 'success',
+      length: 0,
+      songs: []
+    });
+  }
+
+  // Get song IDs array
+  const songIds = likes.map((like) => like.song_id);
+
+  // Fetch full song details
+  const { data: songs, error: songsError } = await supabase
+    .from('songs')
+    .select(
+      'id, copyright_text, duration, image, label, media_url, music, song, year'
+    )
+    .in('id', songIds);
+
+  if (songsError) {
+    return next(
+      new AppError(songsError.message || 'Failed to fetch song details', 500)
+    );
+  }
+
+  res.status(200).json({
+    status: 'success',
+    length: songs.length,
+    songs: songs || []
+  });
+});
+
 exports.userWatch = catchAsync(async (req, res, next) => {
   // Validate input: we only accept `song_id` from client. watched_at is set server-side.
   const userWatchSchema = z.object({
