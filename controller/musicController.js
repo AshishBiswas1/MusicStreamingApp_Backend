@@ -102,7 +102,8 @@ exports.getAllMusic = catchAsync(async (req, res, next) => {
     'media_url',
     'music',
     'song',
-    'year'
+    'year',
+    'visible'
   ].join(',');
 
   const { data, error } = await supabase.from('songs').select(fields);
