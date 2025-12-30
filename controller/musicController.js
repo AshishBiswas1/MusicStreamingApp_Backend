@@ -756,3 +756,71 @@ exports.getPreviouslyRecommended = catchAsync(async (req, res, next) => {
     data
   });
 });
+
+exports.saveRecommendedToSongs = catchAsync(async (req, res, next) => {
+  // Expect body: { items: [ { copyright_text, duration, image, label, media_url, music, song, year, visible? } ] }
+  // We intentionally do NOT accept a `visible` value from the client.
+  // `visible` will always be forced to `false` on insert to prevent
+  // client-side visibility changes.
+  const schema = z.object({
+    items: z
+      .array(
+        z.object({
+          copyright_text: z.string().nullable().optional(),
+          duration: z
+            .preprocess(
+              (v) => (v === undefined || v === null ? null : Number(v)),
+              z.number().nullable()
+            )
+            .optional(),
+          image: z.string().nullable().optional(),
+          label: z.string().nullable().optional(),
+          media_url: z.string().nullable().optional(),
+          music: z.string().nullable().optional(),
+          song: z.string().nullable().optional(),
+          year: z
+            .preprocess(
+              (v) => (v === undefined || v === null ? null : Number(v)),
+              z.number().int().nullable()
+            )
+            .optional()
+        })
+      )
+      .min(1, 'items must contain at least one song')
+  });
+
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((i) => i.message).join(', ');
+    return next(new AppError(message, 400));
+  }
+
+  const items = parsed.data.items.map((it) => ({
+    copyright_text: it.copyright_text || null,
+    duration:
+      it.duration === undefined || it.duration === null
+        ? null
+        : Number(it.duration),
+    image: it.image || null,
+    label: it.label || null,
+    media_url: it.media_url || null,
+    music: it.music || null,
+    song: it.song || null,
+    year: it.year === undefined || it.year === null ? null : Number(it.year),
+    // Force visibility to false regardless of client input
+    visible: false
+  }));
+
+  // Insert into songs table. Use supabase client imported as `supabase` at top.
+  const { data, error } = await supabase.from('songs').insert(items).select();
+
+  if (error) {
+    return next(new AppError(error.message || 'Failed to insert songs', 500));
+  }
+
+  res.status(201).json({
+    status: 'success',
+    inserted: Array.isArray(data) ? data.length : 0,
+    songs: data
+  });
+});

@@ -34,6 +34,8 @@ router.route('/previously').get(musicController.getPreviouslyRecommended);
 
 router.route('/recommended').get(musicController.recommended);
 
+router.route('/savetosongs').post(musicController.saveRecommendedToSongs);
+
 router.route('/userWatch').post(musicController.userWatch);
 
 router.route('/like').post(musicController.likeSong);
