@@ -60,6 +60,53 @@ exports.getPlaylist = catchAsync(async (req, res, next) => {
   });
 });
 
+exports.getPlaylistSongs = catchAsync(async (req, res, next) => {
+  const playlistId = req.params.id;
+
+  // Get playlist_songs and join with songs table to get full song details
+  const { data, error } = await supabase
+    .from('playlist_songs')
+    .select(
+      `
+      id,
+      song_id,
+      created_at,
+      songs:song_id (
+        id,
+        song,
+        music,
+        image,
+        media_url,
+        duration,
+        year,
+        label,
+        copyright_text
+      )
+    `
+    )
+    .eq('playlist', playlistId)
+    .eq('user_id', req.user.id);
+
+  if (error) {
+    return next(
+      new AppError(error.message || 'Failed to fetch playlist songs', 500)
+    );
+  }
+
+  // Transform the data to flatten the songs object
+  const songs = data.map((item) => ({
+    playlist_song_id: item.id,
+    added_at: item.created_at,
+    ...item.songs
+  }));
+
+  res.status(200).json({
+    status: 'success',
+    length: songs.length,
+    songs
+  });
+});
+
 exports.deletePlaylist = catchAsync(async (req, res, next) => {
   const id = req.params.id;
   // Delete the playlist row by id and return the deleted row
