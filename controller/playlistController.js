@@ -5,7 +5,7 @@ const catchAsync = require('../util/catchAsync');
 exports.getUsersPlaylist = catchAsync(async (req, res, next) => {
   const { data, error } = await supabase
     .from('playlist')
-    .select('playlist_name, created_at')
+    .select('id, playlist_name, created_at')
     .eq('user_id', req.user.id);
 
   if (error) {
