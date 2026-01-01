@@ -46,6 +46,60 @@ exports.getMe = catchAsync(async (req, res, next) => {
 });
 
 /**
+ * Get the last played song for the current user
+ */
+exports.getLastPlayedSong = catchAsync(async (req, res, next) => {
+  const userId = req.user.id;
+
+  // Get the most recent played song
+  const { data: recentlyPlayed, error: recentError } = await supabase
+    .from('recently_played_music')
+    .select('song_id, played_at')
+    .eq('user_id', userId)
+    .order('played_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recentError) {
+    return next(new AppError('Could not fetch last played song.', 500));
+  }
+
+  // If no recently played songs, return null
+  if (!recentlyPlayed) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        song: null
+      }
+    });
+  }
+
+  // Get the full song details
+  const { data: song, error: songError } = await supabase
+    .from('songs')
+    .select('*')
+    .eq('id', recentlyPlayed.song_id)
+    .single();
+
+  if (songError || !song) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        song: null
+      }
+    });
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      song,
+      lastPlayedAt: recentlyPlayed.played_at
+    }
+  });
+});
+
+/**
  * Update current user (name and profile_image)
  */
 exports.updateMe = catchAsync(async (req, res, next) => {

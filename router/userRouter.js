@@ -12,6 +12,7 @@ router.route('/login').post(authController.login);
 router.use(authController.protect);
 
 router.route('/me').get(userController.getMe);
+router.route('/lastPlayedSong').get(userController.getLastPlayedSong);
 
 router
   .route('/updateMe')
