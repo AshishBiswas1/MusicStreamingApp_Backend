@@ -18,7 +18,9 @@ router.use('/:id/addSong', musicRouter);
 
 router.route('/:id/songs').get(playlistController.getPlaylistSongs);
 
-router.route('/:id/removeSong').delete(playlistController.removeSongFromPlaylist);
+router
+  .route('/:id/removeSong')
+  .delete(playlistController.removeSongFromPlaylist);
 
 router
   .route('/:id')

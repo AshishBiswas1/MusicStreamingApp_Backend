@@ -140,10 +140,7 @@ exports.removeSongFromPlaylist = catchAsync(async (req, res, next) => {
 
   if (fetchError) {
     return next(
-      new AppError(
-        fetchError.message || 'Failed to verify playlist song',
-        500
-      )
+      new AppError(fetchError.message || 'Failed to verify playlist song', 500)
     );
   }
 
