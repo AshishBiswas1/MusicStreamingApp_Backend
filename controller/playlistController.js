@@ -120,3 +120,59 @@ exports.deletePlaylist = catchAsync(async (req, res, next) => {
 
   res.status(204).json({ status: 'success' });
 });
+
+exports.removeSongFromPlaylist = catchAsync(async (req, res, next) => {
+  const playlistId = req.params.id;
+  const { playlistSongId } = req.body;
+
+  if (!playlistSongId) {
+    return next(new AppError('playlistSongId is required', 400));
+  }
+
+  // Verify the playlist belongs to the user and the song is in the playlist
+  const { data: playlistSong, error: fetchError } = await supabase
+    .from('playlist_songs')
+    .select('id, playlist, user_id')
+    .eq('id', playlistSongId)
+    .eq('playlist', playlistId)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (fetchError) {
+    return next(
+      new AppError(
+        fetchError.message || 'Failed to verify playlist song',
+        500
+      )
+    );
+  }
+
+  if (!playlistSong) {
+    return next(
+      new AppError(
+        'Song not found in playlist or you do not have permission',
+        404
+      )
+    );
+  }
+
+  // Delete the song from the playlist
+  const { error: deleteError } = await supabase
+    .from('playlist_songs')
+    .delete()
+    .eq('id', playlistSongId);
+
+  if (deleteError) {
+    return next(
+      new AppError(
+        deleteError.message || 'Failed to remove song from playlist',
+        500
+      )
+    );
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Song removed from playlist successfully'
+  });
+});
