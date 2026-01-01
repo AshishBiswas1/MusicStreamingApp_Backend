@@ -94,7 +94,7 @@ exports.updateMe = catchAsync(async (req, res, next) => {
       .getPublicUrl(imagePath);
 
     if (urlData && urlData.publicUrl) {
-      updateData.profile_image = urlData.publicUrl;
+      updateData.profile = urlData.publicUrl;
     }
   }
 
