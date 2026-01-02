@@ -11,7 +11,10 @@ const upload = multer({ storage: multer.memoryStorage() }).single(
 
 // Validation schema for updateMe
 const updateMeSchema = z.object({
-  name: z.string().min(1, 'Name cannot be empty').optional()
+  name: z.string().min(1, 'Name cannot be empty').optional(),
+  recommended: z
+    .array(z.string().min(1, 'Each recommendation must be a non-empty string'))
+    .optional()
 });
 
 /**
@@ -117,6 +120,43 @@ exports.updateMe = catchAsync(async (req, res, next) => {
     updateData.name = parsed.data.name;
   }
 
+  // Parse and validate recommended if provided. Support FormData string values.
+  if (req.body.recommended !== undefined) {
+    let raw = req.body.recommended;
+    let recommendedArr = null;
+
+    if (Array.isArray(raw)) {
+      recommendedArr = raw;
+    } else if (typeof raw === 'string') {
+      // Try to parse JSON first
+      try {
+        if (raw.trim().startsWith('[')) {
+          recommendedArr = JSON.parse(raw);
+        } else {
+          // comma-separated string
+          recommendedArr = raw
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        }
+      } catch (err) {
+        // fallback to splitting by comma
+        recommendedArr = raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
+    }
+
+    const parsedRec = updateMeSchema.safeParse({ recommended: recommendedArr });
+    if (!parsedRec.success) {
+      const message = parsedRec.error.issues.map((e) => e.message).join(', ');
+      return next(new AppError(message, 400));
+    }
+
+    updateData.recommended = parsedRec.data.recommended;
+  }
+
   // Handle profile image upload if file is provided
   if (req.file) {
     const imageFile = req.file;
@@ -155,7 +195,10 @@ exports.updateMe = catchAsync(async (req, res, next) => {
   // Check if there's anything to update
   if (Object.keys(updateData).length === 0) {
     return next(
-      new AppError('Please provide name or profile_image to update.', 400)
+      new AppError(
+        'Please provide name, profile_image, or recommended to update.',
+        400
+      )
     );
   }
 
